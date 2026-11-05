@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="ta" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M3U Playlist Scanner & Live Player</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0f172a',
+                        darkCard: '#1e293b',
+                        darkHover: '#334155'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- HLS.js for video streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="bg-darkBg text-slate-100 min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-darkCard border-b border-slate-800 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 p-2.5 rounded-xl text-white shadow-lg shadow-indigo-500/30">
+                    <i class="fa-solid fa-satellite-dish text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        M3U Scanner & Player 
+                        <span class="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-full">Pro</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">IPTV Playlist Live Scanner & Downloader (தமிழ் / English)</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="downloadLiveBtn" onclick="downloadLiveM3U()" disabled class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-lg shadow-emerald-600/20">
+                    <i class="fa-solid fa-download"></i>
+                    <span>Download Live M3U (லைவ் டவுன்லோட்)</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full space-y-6">
+
+        <!-- Input Section: Upload File or URL -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-darkCard border border-slate-800 p-5 rounded-2xl shadow-xl">
+            <!-- File Upload -->
+            <div class="flex flex-col justify-between space-y-3">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-200 mb-1">
+                        <i class="fa-solid fa-file-arrow-up text-indigo-400 mr-1.5"></i> Upload .m3u File (ஃபைல் அப்லோட்)
+                    </label>
+                    <p class="text-xs text-slate-400">உங்கள் கணினியிலிருந்து .m3u அல்லது .m3u8 ஃபைலைத் தேர்ந்தெடுக்கவும்.</p>
+                </div>
+                <label class="border-2 border-dashed border-slate-700 hover:border-indigo-500 bg-slate-900/50 hover:bg-slate-900 rounded-xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2 group">
+                    <i class="fa-solid fa-cloud-arrow-up text-2xl text-slate-400 group-hover:text-indigo-400 transition"></i>
+                    <span id="fileNameLabel" class="text-sm font-medium text-slate-300">Browse or drop file here</span>
+                    <input type="file" id="m3uFileInput" accept=".m3u,.m3u8,.txt" class="hidden" onchange="handleFileUpload(event)">
+                </label>
+            </div>
+
+            <!-- URL Input -->
+            <div class="flex flex-col justify-between space-y-3">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-200 mb-1">
+                        <i class="fa-solid fa-link text-indigo-400 mr-1.5"></i> Paste .m3u URL (லிங்க் கொடுக்கவும்)
+                    </label>
+                    <p class="text-xs text-slate-400">IPTV பிளேலிஸ்ட் நேரடி URL-ஐ கீழே ஒட்டவும் (CORS ராக்ஸி ஆதரவுடன்).</p>
+                </div>
+                <div class="flex gap-2 items-center h-full">
+                    <input type="url" id="m3uUrlInput" placeholder="https://example.com/playlist.m3u" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+                    <button onclick="loadFromUrl()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-xl text-sm font-medium transition shrink-0 shadow-lg shadow-indigo-600/20">
+                        <i class="fa-solid fa-download mr-1"></i> Load
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Statistics Cards -->
+        <div id="statsContainer" class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Total Channels -->
+            <div class="bg-darkCard border border-slate-800 p-4 rounded-2xl shadow-md flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-400 font-medium">Total Channels (மொத்தம்)</p>
+                    <h3 id="statTotal" class="text-2xl font-bold text-white mt-1">0</h3>
+                </div>
+                <div class="bg-blue-500/10 text-blue-400 p-3 rounded-xl border border-blue-500/20">
+                    <i class="fa-solid fa-list text-lg"></i>
+                </div>
+            </div>
+            <!-- Live Channels -->
+            <div class="bg-darkCard border border-slate-800 p-4 rounded-2xl shadow-md flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-400 font-medium">Live / Active (லைவ்)</p>
+                    <h3 id="statLive" class="text-2xl font-bold text-emerald-400 mt-1">0</h3>
+                </div>
+                <div class="bg-emerald-500/10 text-emerald-400 p-3 rounded-xl border border-emerald-500/20">
+                    <i class="fa-solid fa-signal text-lg"></i>
+                </div>
+            </div>
+            <!-- Offline/Down Channels -->
+            <div class="bg-darkCard border border-slate-800 p-4 rounded-2xl shadow-md flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-400 font-medium">Offline / Down (டவுன்)</p>
+                    <h3 id="statDown" class="text-2xl font-bold text-rose-400 mt-1">0</h3>
+                </div>
+                <div class="bg-rose-500/10 text-rose-400 p-3 rounded-xl border border-rose-500/20">
+                    <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+            </div>
+            <!-- Checking Status -->
+            <div class="bg-darkCard border border-slate-800 p-4 rounded-2xl shadow-md flex items-center justify-between">
+                <div>
+                    <p class="text-xs text-slate-400 font-medium">Pending / Checking</p>
+                    <h3 id="statPending" class="text-2xl font-bold text-amber-400 mt-1">0</h3>
+                </div>
+                <div class="bg-amber-500/10 text-amber-400 p-3 rounded-xl border border-amber-500/20">
+                    <i class="fa-solid fa-spinner fa-spin text-lg" id="spinnerIcon"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scanner Control Toolbar & Search -->
+        <div class="bg-darkCard border border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+            <!-- Filter Tabs -->
+            <div class="flex items-center gap-1 bg-slate-900 p-1.5 rounded-xl border border-slate-800 w-full md:w-auto overflow-x-auto">
+                <button onclick="setFilter('all')" id="filterAllBtn" class="px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 text-white transition whitespace-nowrap">
+                    All (<span id="countAll">0</span>)
+                </button>
+                <button onclick="setFilter('live')" id="filterLiveBtn" class="px-4 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+                    Live (<span id="countLive">0</span>)
+                </button>
+                <button onclick="setFilter('down')" id="filterDownBtn" class="px-4 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap">
+                    Down (<span id="countDown">0</span>)
+                </button>
+            </div>
+
+            <!-- Search & Action Buttons -->
+            <div class="flex items-center gap-3 w-full md:w-auto flex-wrap md:flex-nowrap">
+                <div class="relative w-full md:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                    <input type="text" id="searchInput" oninput="renderChannels()" placeholder="தேடுங்கள் (Search channels)..." class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3.5 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 transition">
+                </div>
+                <button onclick="startScanning()" id="scanBtn" disabled class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-xs font-semibold transition w-full md:w-auto shadow-md shadow-indigo-600/20">
+                    <i class="fa-solid fa-radar"></i>
+                    <span>Scan Status (ஸ்டேட்டஸ் சோதி)</span>
+                </button>
+                <button onclick="stopScanning()" id="stopScanBtn" disabled class="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-2 rounded-xl text-xs font-semibold transition">
+                    <i class="fa-solid fa-stop"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Scanning Progress Bar -->
+        <div id="progressWrapper" class="hidden bg-darkCard border border-slate-800 p-4 rounded-2xl shadow-xl space-y-2">
+            <div class="flex justify-between text-xs font-medium">
+                <span id="scanStatusText" class="text-slate-300">Scanning channels...</span>
+                <span id="scanPercentText" class="text-indigo-400">0%</span>
+            </div>
+            <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                <div id="scanProgressBar" class="bg-indigo-500 h-full w-0 transition-all duration-200"></div>
+            </div>
+        </div>
+
+        <!-- Main Workspace: Video Player + Channels List Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Video Player Section (1 Col on Desktop, Top on Mobile) -->
+            <div class="lg:col-span-1 bg-darkCard border border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-tv text-indigo-400"></i> Video Player (லைவ் பிளேயர்)
+                    </h2>
+                    <span id="currentPlayingName" class="text-xs text-indigo-400 truncate max-w-[150px]">No channel selected</span>
+                </div>
+                <!-- Video Element container -->
+                <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center group">
+                    <video id="videoPlayer" controls autoplay class="w-full h-full object-contain"></video>
+                    <div id="playerPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-400 p-4 text-center">
+                        <i class="fa-solid fa-circle-play text-4xl mb-2 text-indigo-500 opacity-80"></i>
+                        <p class="text-xs">சேனலை கிளிக் செய்து பார்க்கவும்<br>(Click any live channel to play)</p>
+                    </div>
+                </div>
+                <div class="bg-slate-900/60 p-3 rounded-xl border border-slate-800/80 text-xs text-slate-400 space-y-1">
+                    <p class="font-medium text-slate-300"><i class="fa-solid fa-circle-info text-indigo-400 mr-1"></i> குறிப்பு (Note):</p>
+                    <p>சில ஸ்ட்ரீம்கள் CORS கட்டுப்பாடுகள் காரணமாக பிரவுசரில் நேரடியாக ஓடாது. HLS (.m3u8) மற்றும் MP4/HTTP ஸ்ட்ரீம்கள் சிறந்த முறையில் வேலை செய்யும்.</p>
+                </div>
+            </div>
+
+            <!-- Channels List Table / Grid (2 Cols on Desktop) -->
+            <div class="lg:col-span-2 bg-darkCard border border-slate-800 rounded-2xl shadow-xl flex flex-col overflow-hidden">
+                <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/40">
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ul text-indigo-400"></i> Channels List (<span id="displayedCount">0</span> channels)
+                    </h2>
+                    <span class="text-xs text-slate-400">Click row to play</span>
+                </div>
+                <div class="overflow-y-auto max-h-[500px] custom-scrollbar">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-slate-900/80 text-slate-400 text-xs uppercase sticky top-0 border-b border-slate-800 z-10">
+                            <tr>
+                                <th class="py-3 px-4 font-semibold">Status</th>
+                                <th class="py-3 px-4 font-semibold">Channel Name</th>
+                                <th class="py-3 px-4 font-semibold">Group / Category</th>
+                                <th class="py-3 px-4 font-semibold text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="channelsTableBody" class="divide-y divide-slate-800/60 text-xs">
+                            <tr>
+                                <td colspan="4" class="py-8 text-center text-slate-500">
+                                    <i class="fa-solid fa-folder-open text-3xl mb-2 block text-slate-600"></i>
+                                    தயவுசெய்து .m3u ஃபைலை அப்லோட் செய்யவும் அல்லது URL கொடுக்கவும்.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Custom Notification Modal / Message Box -->
+    <div id="messageModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-darkCard border border-slate-800 max-w-md w-full p-6 rounded-2xl shadow-2xl space-y-4">
+            <div class="flex items-center space-x-3">
+                <div id="modalIconContainer" class="bg-indigo-500/10 text-indigo-400 p-3 rounded-xl border border-indigo-500/20">
+                    <i id="modalIcon" class="fa-solid fa-bell text-xl"></i>
+                </div>
+                <div>
+                    <h3 id="modalTitle" class="text-base font-bold text-white">செய்தி (Notification)</h3>
+                    <p id="modalMessage" class="text-xs text-slate-300 mt-0.5">Message text here</p>
+                </div>
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="closeModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-xl text-xs font-semibold transition">
+                    சரி (OK)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 bg-darkCard/50 py-4 mt-auto text-center text-xs text-slate-500">
+        <p>M3U Playlist Live Scanner & Downloader • Built with HTML5, Tailwind CSS & JavaScript</p>
+    </footer>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        let channels = [];
+        let currentFilter = 'all';
+        let isScanning = false;
+        let scanAbortController = null;
+        let hlsInstance = null;
+
+        // Custom non-blocking alert substitute
+        function showNotification(title, message, isError = false) {
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMessage').innerText = message;
+            const iconContainer = document.getElementById('modalIconContainer');
+            const icon = document.getElementById('modalIcon');
+            if (isError) {
+                iconContainer.className = "bg-rose-500/10 text-rose-400 p-3 rounded-xl border border-rose-500/20";
+                icon.className = "fa-solid fa-triangle-exclamation text-xl";
+            } else {
+                iconContainer.className = "bg-indigo-500/10 text-indigo-400 p-3 rounded-xl border border-indigo-500/20";
+                icon.className = "fa-solid fa-circle-check text-xl";
+            }
+            document.getElementById('messageModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('messageModal').classList.add('hidden');
+        }
+
+        // Handle File Upload (.m3u, .m3u8)
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            document.getElementById('fileNameLabel').innerText = file.name;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                parseM3UContent(e.target.result);
+            };
+            reader.readAsText(file);
+        }
+
+        // Handle URL Load (with fallback proxies for CORS)
+        async function loadFromUrl() {
+            const url = document.getElementById('m3uUrlInput').value.trim();
+            if (!url) {
+                showNotification("கவனிக்கவும்", "தயவுசெய்து சரியான M3U URL-ஐ உள்ளிடவும்.", true);
+                return;
+            }
+
+            showNotification("ஏற்றுகிறது...", "URL-லிருந்து பிளேலிஸ்ட் பதிவிறக்கப்படுகிறது...");
+            
+            // Try direct fetch first, fallback to CORS proxies if needed
+            let content = null;
+            const proxies = [
+                url,
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+                `https://corsproxy.io/?${encodeURIComponent(url)}`
+            ];
+
+            for (let pUrl of proxies) {
+                try {
+                    const response = await fetch(pUrl);
+                    if (response.ok) {
+                        content = await response.text();
+                        break;
+                    }
+                } catch (err) {
+                    console.warn("Proxy attempt failed:", pUrl);
+                }
+            }
+
+            if (content && content.includes("#EXTM3U")) {
+                parseM3UContent(content);
+                closeModal();
+            } else {
+                showNotification("பிழை", "URL-லிருந்து டேட்டாவை பெற முடியவில்லை அல்லது அது சரியான M3U ஃபார்மட் இல்லை.", true);
+            }
+        }
+
+        // Parse M3U Text Content
+        function parseM3UContent(text) {
+            const lines = text.split(/\r?\n/);
+            channels = [];
+            let currentChannel = {
+                name: "Unknown Channel",
+                group: "General",
+                logo: "",
+                url: "",
+                status: "pending", // pending, live, down
+                responseTime: null
+            };
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+                if (!line) continue;
+
+                if (line.startsWith("#EXTINF:")) {
+                    // Parse attributes like tvg-name, group-title, tvg-logo and channel title
+                    currentChannel = {
+                        name: "Unknown Channel",
+                        group: "General",
+                        logo: "",
+                        url: "",
+                        status: "pending",
+                        responseTime: null
+                    };
+
+                    // Extract channel name after the last comma
+                    const commaIndex = line.lastIndexOf(',');
+                    if (commaIndex !== -1) {
+                        currentChannel.name = line.substring(commaIndex + 1).trim();
+                    }
+
+                    // Extract group-title
+                    const groupMatch = line.match(/group-title="([^"]*)"/i);
+                    if (groupMatch) {
+                        currentChannel.group = groupMatch[1];
+                    }
+
+                    // Extract logo
+                    const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
+                    if (logoMatch) {
+                        currentChannel.logo = logoMatch[1];
+                    }
+                } else if (!line.startsWith("#")) {
+                    currentChannel.url = line;
+                    if (currentChannel.url) {
+                        channels.push(currentChannel);
+                    }
+                    currentChannel = {
+                        name: "Unknown Channel",
+                        group: "General",
+                        logo: "",
+                        url: "",
+                        status: "pending",
+                        responseTime: null
+                    };
+                }
+            }
+
+            if (channels.length === 0) {
+                showNotification("எச்சரிக்கை", "இந்த ஃபைலில் சேனல்கள் எதுவும் கண்டறியப்படவில்லை.", true);
+                return;
+            }
+
+            updateStats();
+            renderChannels();
+            document.getElementById('scanBtn').removeAttribute('disabled');
+            document.getElementById('downloadLiveBtn').removeAttribute('disabled');
+            showNotification("வெற்றி", `மொத்தம் ${channels.length} சேனல்கள் வெற்றிகரமாக ஏற்றப்பட்டன!`);
+        }
+
+        // Update Dashboard Stats counters
+        function updateStats() {
+            const total = channels.length;
+            const live = channels.filter(c => c.status === 'live').length;
+            const down = channels.filter(c => c.status === 'down').length;
+            const pending = channels.filter(c => c.status === 'pending').length;
+
+            document.getElementById('statTotal').innerText = total;
+            document.getElementById('statLive').innerText = live;
+            document.getElementById('statDown').innerText = down;
+            document.getElementById('statPending').innerText = pending;
+
+            document.getElementById('countAll').innerText = total;
+            document.getElementById('countLive').innerText = live;
+            document.getElementById('countDown').innerText = down;
+        }
+
+        // Filter Switcher
+        function setFilter(filter) {
+            currentFilter = filter;
+            ['all', 'live', 'down'].forEach(f => {
+                const btn = document.getElementById(`filter${f.charAt(0).toUpperCase() + f.slice(1)}Btn`);
+                if (f === filter) {
+                    btn.className = "px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 text-white transition whitespace-nowrap";
+                } else {
+                    btn.className = "px-4 py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition whitespace-nowrap";
+                }
+            });
+            renderChannels();
+        }
+
+        // Render Channels Table
+        function renderChannels() {
+            const tbody = document.getElementById('channelsTableBody');
+            const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+            
+            let filtered = channels.filter(c => {
+                const matchesSearch = c.name.toLowerCase().includes(searchQuery) || c.group.toLowerCase().includes(searchQuery);
+                if (currentFilter === 'live') return matchesSearch && c.status === 'live';
+                if (currentFilter === 'down') return matchesSearch && c.status === 'down';
+                return matchesSearch;
+            });
+
+            document.getElementById('displayedCount').innerText = filtered.length;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-slate-500">சேனல்கள் எதுவும் கிடைக்கவில்லை (No channels found).</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach((ch, index) => {
+                let statusBadge = '';
+                if (ch.status === 'live') {
+                    statusBadge = `<span class="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-semibold"><i class="fa-solid fa-circle text-[6px] animate-pulse"></i> Live</span>`;
+                } else if (ch.status === 'down') {
+                    statusBadge = `<span class="inline-flex items-center gap-1.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2.5 py-1 rounded-full text-[10px] font-semibold"><i class="fa-solid fa-circle-xmark"></i> Down</span>`;
+                } else {
+                    statusBadge = `<span class="inline-flex items-center gap-1.5 bg-slate-800 text-slate-400 border border-slate-700 px-2.5 py-1 rounded-full text-[10px] font-semibold"><i class="fa-solid fa-clock"></i> Pending</span>`;
+                }
+
+                // Find original index in main channels array for playback & reference
+                const originalIndex = channels.indexOf(ch);
+
+                html += `
+                    <tr class="hover:bg-slate-800/40 transition cursor-pointer group" onclick="playChannel(${originalIndex})">
+                        <td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>
+                        <td class="py-3 px-4 font-medium text-slate-200 group-hover:text-indigo-400 transition truncate max-w-xs">
+                            <div class="flex items-center gap-2">
+                                ${ch.logo ? `<img src="${ch.logo}" class="w-5 h-5 rounded object-cover" onerror="this.style.display='none'">` : ''}
+                                <span class="truncate">${escapeHtml(ch.name)}</span>
+                            </div>
+                        </td>
+                        <td class="py-3 px-4 text-slate-400 truncate max-w-[150px]">${escapeHtml(ch.group)}</td>
+                        <td class="py-3 px-4 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+                            <button onclick="playChannel(${originalIndex})" class="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition border border-indigo-500/30">
+                                <i class="fa-solid fa-play mr-1"></i> Play
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Start Channel Status Scanner
+        async function startScanning() {
+            if (isScanning || channels.length === 0) return;
+            isScanning = true;
+            scanAbortController = new AbortController();
+
+            document.getElementById('scanBtn').setAttribute('disabled', 'true');
+            document.getElementById('stopScanBtn').removeAttribute('disabled');
+            document.getElementById('progressWrapper').classList.remove('hidden');
+            document.getElementById('spinnerIcon').classList.add('fa-spin');
+
+            const total = channels.length;
+            let checked = 0;
+
+            // Process channels in batches of 5 for speed & concurrency control
+            const batchSize = 5;
+            for (let i = 0; i < total; i += batchSize) {
+                if (!isScanning) break;
+                const batch = channels.slice(i, i + batchSize);
+                
+                await Promise.all(batch.map(async (ch) => {
+                    if (!isScanning) return;
+                    try {
+                        // Test stream connectivity using fetch with timeout
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 4000);
+                        
+                        const startTs = performance.now();
+                        const response = await fetch(ch.url, {
+                            method: 'GET',
+                            mode: 'no-cors', // allows checking stream endpoints without strict CORS block on response body
+                            signal: controller.signal
+                        });
+                        clearTimeout(timeoutId);
+                        const endTs = performance.now();
+                        
+                        ch.status = 'live';
+                        ch.responseTime = Math.round(endTs - startTs);
+                    } catch (err) {
+                        ch.status = 'down';
+                    }
+                    checked++;
+                }));
+
+                // Update Progress UI
+                const percent = Math.round((checked / total) * 100);
+                document.getElementById('scanProgressBar').style.width = `${percent}%`;
+                document.getElementById('scanPercentText.innerText` || (document.getElementById('scanPercentText').innerText = `${percent}%`));
+                document.getElementById('scanStatusText').innerText = `Scanning: ${checked} / ${total} channels checked`;
+                updateStats();
+                renderChannels();
+            }
+
+            stopScanning();
+            showNotification("ஸ்கேன் முடிவு", "அனைத்து சேனல்களின் நிலை சரிபார்க்கப்பட்டுவிட்டது!");
+        }
+
+        function stopScanning() {
+            isScanning = false;
+            if (scanAbortController) {
+                scanAbortController.abort();
+            }
+            document.getElementById('scanBtn').removeAttribute('disabled');
+            document.getElementById('stopScanBtn').setAttribute('disabled', 'true');
+            document.getElementById('spinnerIcon').classList.remove('fa-spin');
+            document.getElementById('scanStatusText').innerText = "Scanning completed or stopped.";
+        }
+
+        // Play Selected Channel in Integrated Video Player
+        function playChannel(index) {
+            const ch = channels[index];
+            if (!ch || !ch.url) return;
+
+            document.getElementById('currentPlayingName').innerText = ch.name;
+            document.getElementById('playerPlaceholder').classList.add('hidden');
+
+            const video = document.getElementById('videoPlayer');
+
+            // Clean up previous HLS instance if any
+            if (hlsInstance) {
+                hlsInstance.destroy();
+                hlsInstance = null;
+            }
+
+            if (ch.url.includes('.m3u8')) {
+                if (Hls.isSupported()) {
+                    hlsInstance = new Hls();
+                    hlsInstance.loadSource(ch.url);
+                    hlsInstance.attachMedia(video);
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+                        video.play().catch(e => console.log("Autoplay blocked:", e));
+                    });
+                    hlsInstance.on(Hls.Events.ERROR, function(event, data) {
+                        if (data.fatal) {
+                            console.warn("HLS fatal error, trying fallback:", data);
+                            showNotification("பிழை", "இந்த HLS ஸ்ட்ரீம் பிளே ஆகவில்லை அல்லது சர்வர் ஆஃப்லைனில் உள்ளது.", true);
+                        }
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = ch.url;
+                    video.addEventListener('loadedmetadata', function() {
+                        video.play();
+                    });
+                } else {
+                    showNotification("பிழை", "உங்கள் பிரவுசர் HLS ஸ்ட்ரீம்களை ஆதரிக்கவில்லை.", true);
+                }
+            } else {
+                video.src = ch.url;
+                video.play().catch(e => {
+                    showNotification("பிழை", "ஸ்ட்ரீம் பிளே செய்வதில் சிக்கல். CORS அல்லது இணைப்பு பிழை இருக்கலாம்.", true);
+                });
+            }
+        }
+
+        // Download Filtered Live-Only M3U Playlist
+        function downloadLiveM3U() {
+            const liveChannels = channels.filter(c => c.status === 'live');
+            
+            if (liveChannels.length === 0) {
+                showNotification("கவனிக்கவும்", "டவுன்லோட் செய்ய லைவ் சேனல்கள் எதுவும் இல்லை! முதலில் 'Scan Status' செய்யவும்.", true);
+                return;
+            }
+
+            let m3uContent = "#EXTM3U\n";
+            liveChannels.forEach(ch => {
+                m3uContent += `#EXTINF:-1 tvg-logo="${ch.logo || ''}" group-title="${ch.group || 'Live'}";${ch.name}\n`;
+                m3uContent += `${ch.url}\n`;
+            });
+
+            const blob = new Blob([m3uContent], { type: 'audio/x-mpegurl' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `live_channels_${new Date().toISOString().slice(0,10)}.m3u`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showNotification("வெற்றி", `${liveChannels.length} லைவ் சேனல்களுடன் M3U ஃபைல் டவுன்லோட் செய்யப்பட்டது!`);
+        }
+    </script>
+</body>
+</html>
